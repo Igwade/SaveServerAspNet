@@ -1,7 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using SaveLoadApp.Data;
 using SaveLoadApp.Models;
+using JsonSerializer = Newtonsoft.Json.JsonSerializer;
 
 namespace SaveLoadApp.Controllers
 {
@@ -10,24 +13,39 @@ namespace SaveLoadApp.Controllers
     public class RecordsController(AppDbContext context) : ControllerBase
     {
         [HttpPut("save")]
-        public async Task<IActionResult> Save([FromQuery] string version, [FromBody] string content)
+        public async Task<IActionResult> Save([FromQuery] string version, [FromBody] object content)
         {
-            if (string.IsNullOrEmpty(version) || string.IsNullOrEmpty(content))
+            if (string.IsNullOrEmpty(version) || content == null)
             {
                 return BadRequest("Version and content are required.");
+            }
+
+            string contentString;
+
+            if (content is JsonElement jsonElement)
+            {
+                contentString = jsonElement.GetRawText();
+            }
+            else if (content is string plainString)
+            {
+                contentString = plainString;
+            }
+            else
+            {
+                contentString = JsonConvert.SerializeObject(content);
             }
 
             var existingRecord = await context.Records.FirstOrDefaultAsync(r => r.Version == version);
             if (existingRecord != null)
             {
-                existingRecord.Content = content;
+                existingRecord.Content = contentString;
             }
             else
             {
                 var newRecord = new Record
                 {
                     Version = version,
-                    Content = content
+                    Content = contentString
                 };
                 context.Records.Add(newRecord);
             }
@@ -35,6 +53,7 @@ namespace SaveLoadApp.Controllers
             await context.SaveChangesAsync();
             return Ok(new { message = "Record saved successfully." });
         }
+
 
         [HttpGet("load")]
         public async Task<IActionResult> Load([FromQuery] string version)
