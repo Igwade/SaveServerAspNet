@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
@@ -13,39 +14,28 @@ namespace SaveLoadApp.Controllers
     public class RecordsController(AppDbContext context) : ControllerBase
     {
         [HttpPut("save")]
-        public async Task<IActionResult> Save([FromQuery] string version, [FromBody] object content)
+        public async Task<IActionResult> Save([FromQuery] string version)
         {
-            if (string.IsNullOrEmpty(version) || content == null)
+            
+            using var reader = new StreamReader(Request.Body, Encoding.UTF8);
+            string body = await reader.ReadToEndAsync();
+            
+            if (string.IsNullOrEmpty(version) || string.IsNullOrEmpty(body))
             {
                 return BadRequest("Version and content are required.");
             }
-
-            string contentString;
-
-            if (content is JsonElement jsonElement)
-            {
-                contentString = jsonElement.GetRawText();
-            }
-            else if (content is string plainString)
-            {
-                contentString = plainString;
-            }
-            else
-            {
-                contentString = JsonConvert.SerializeObject(content);
-            }
-
+            
             var existingRecord = await context.Records.FirstOrDefaultAsync(r => r.Version == version);
             if (existingRecord != null)
             {
-                existingRecord.Content = contentString;
+                existingRecord.Content = body;
             }
             else
             {
                 var newRecord = new Record
                 {
                     Version = version,
-                    Content = contentString
+                    Content = body
                 };
                 context.Records.Add(newRecord);
             }
